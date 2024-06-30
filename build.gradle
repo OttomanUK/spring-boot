@@ -24,6 +24,8 @@ allprojects {
 	configurations.all {
 		resolutionStrategy.cacheChangingModulesFor 0, "minutes"
 	}
+}
+
 sonar {
   properties {
     property "sonar.projectKey", "OttomanUK_spring-boot"
