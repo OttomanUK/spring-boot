@@ -20,7 +20,6 @@ import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.EventListener;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -54,291 +53,222 @@ import org.springframework.util.MultiValueMap;
  * end. Further sorting is applied within these groups using the
  * {@link AnnotationAwareOrderComparator}.
  *
- * @author Dave Syer
- * @author Phillip Webb
- * @author Brian Clozel
  * @since 1.4.0
  */
 public class ServletContextInitializerBeans extends AbstractCollection<ServletContextInitializer> {
 
-	private static final String DISPATCHER_SERVLET_NAME = "dispatcherServlet";
+    private static final String DISPATCHER_SERVLET_NAME = "dispatcherServlet";
 
-	private static final Log logger = LogFactory.getLog(ServletContextInitializerBeans.class);
+    private static final Log logger = LogFactory.getLog(ServletContextInitializerBeans.class);
 
-	/**
-	 * Seen bean instances or bean names.
-	 */
-	private final Seen seen = new Seen();
+    private final Seen seen = new Seen();
 
-	private final MultiValueMap<Class<?>, ServletContextInitializer> initializers;
+    private final MultiValueMap<Class<?>, ServletContextInitializer> initializers;
 
-	private final List<Class<? extends ServletContextInitializer>> initializerTypes;
+    private final List<Class<? extends ServletContextInitializer>> initializerTypes;
 
-	private final List<ServletContextInitializer> sortedList;
+    private final List<ServletContextInitializer> sortedList;
 
-	@SafeVarargs
-	@SuppressWarnings("varargs")
-	public ServletContextInitializerBeans(ListableBeanFactory beanFactory,
-			Class<? extends ServletContextInitializer>... initializerTypes) {
-		this.initializers = new LinkedMultiValueMap<>();
-		this.initializerTypes = (initializerTypes.length != 0) ? Arrays.asList(initializerTypes)
-				: Collections.singletonList(ServletContextInitializer.class);
-		addServletContextInitializerBeans(beanFactory);
-		addAdaptableBeans(beanFactory);
-		this.sortedList = this.initializers.values()
-			.stream()
-			.flatMap((value) -> value.stream().sorted(AnnotationAwareOrderComparator.INSTANCE))
-			.toList();
-		logMappings(this.initializers);
-	}
+    @SafeVarargs
+    @SuppressWarnings("varargs")
+    public ServletContextInitializerBeans(ListableBeanFactory beanFactory,
+                                          Class<? extends ServletContextInitializer>... initializerTypes) {
+        this.initializers = new LinkedMultiValueMap<>();
+        this.initializerTypes = (initializerTypes.length != 0) ? Arrays.asList(initializerTypes)
+                : Collections.singletonList(ServletContextInitializer.class);
+        addServletContextInitializerBeans(beanFactory);
+        addAdaptableBeans(beanFactory);
+        this.sortedList = this.initializers.values()
+                .stream()
+                .flatMap((value) -> value.stream().sorted(AnnotationAwareOrderComparator.INSTANCE))
+                .toList();
+        logMappings(this.initializers);
+    }
 
-	private void addServletContextInitializerBeans(ListableBeanFactory beanFactory) {
-		for (Class<? extends ServletContextInitializer> initializerType : this.initializerTypes) {
-			for (Entry<String, ? extends ServletContextInitializer> initializerBean : getOrderedBeansOfType(beanFactory,
-					initializerType)) {
-				addServletContextInitializerBean(initializerBean.getKey(), initializerBean.getValue(), beanFactory);
-			}
-		}
-	}
+    private void addServletContextInitializerBeans(ListableBeanFactory beanFactory) {
+        for (Class<? extends ServletContextInitializer> initializerType : this.initializerTypes) {
+            for (Entry<String, ? extends ServletContextInitializer> initializerBean : getOrderedBeansOfType(beanFactory,
+                    initializerType)) {
+                addServletContextInitializerBean(initializerBean.getKey(), initializerBean.getValue(), beanFactory);
+            }
+        }
+    }
 
-	private void addServletContextInitializerBean(String beanName, ServletContextInitializer initializer,
-			ListableBeanFactory beanFactory) {
-		if (initializer instanceof ServletRegistrationBean<?> servletRegistrationBean) {
-			Servlet source = servletRegistrationBean.getServlet();
-			addServletContextInitializerBean(Servlet.class, beanName, servletRegistrationBean, beanFactory, source);
-		}
-		else if (initializer instanceof FilterRegistrationBean<?> filterRegistrationBean) {
-			Filter source = filterRegistrationBean.getFilter();
-			addServletContextInitializerBean(Filter.class, beanName, filterRegistrationBean, beanFactory, source);
-		}
-		else if (initializer instanceof DelegatingFilterProxyRegistrationBean registrationBean) {
-			String source = registrationBean.getTargetBeanName();
-			addServletContextInitializerBean(Filter.class, beanName, registrationBean, beanFactory, source);
-		}
-		else if (initializer instanceof ServletListenerRegistrationBean<?> registrationBean) {
-			EventListener source = registrationBean.getListener();
-			addServletContextInitializerBean(EventListener.class, beanName, registrationBean, beanFactory, source);
-		}
-		else {
-			addServletContextInitializerBean(ServletContextInitializer.class, beanName, initializer, beanFactory,
-					initializer);
-		}
-	}
+    private void addServletContextInitializerBean(String beanName, ServletContextInitializer initializer,
+                                                  ListableBeanFactory beanFactory) {
+        if (initializer instanceof ServletRegistrationBean<?> servletRegistrationBean) {
+            Servlet source = servletRegistrationBean.getServlet();
+            addServletContextInitializerBean(Servlet.class, beanName, servletRegistrationBean, beanFactory, source);
+        } else if (initializer instanceof FilterRegistrationBean<?> filterRegistrationBean) {
+            Filter source = filterRegistrationBean.getFilter();
+            addServletContextInitializerBean(Filter.class, beanName, filterRegistrationBean, beanFactory, source);
+        } else if (initializer instanceof DelegatingFilterProxyRegistrationBean registrationBean) {
+            String source = registrationBean.getTargetBeanName();
+            addServletContextInitializerBean(Filter.class, beanName, registrationBean, beanFactory, source);
+        } else if (initializer instanceof ServletListenerRegistrationBean<?> registrationBean) {
+            EventListener source = registrationBean.getListener();
+            addServletContextInitializerBean(EventListener.class, beanName, registrationBean, beanFactory, source);
+        } else {
+            addServletContextInitializerBean(ServletContextInitializer.class, beanName, initializer, beanFactory,
+                    initializer);
+        }
+    }
 
-	private void addServletContextInitializerBean(Class<?> type, String beanName, ServletContextInitializer initializer,
-			ListableBeanFactory beanFactory, Object source) {
-		this.initializers.add(type, initializer);
-		if (source != null) {
-			// Mark the underlying source as seen in case it wraps an existing bean
-			this.seen.add(type, source);
-		}
-		if (logger.isTraceEnabled()) {
-			String resourceDescription = getResourceDescription(beanName, beanFactory);
-			int order = getOrder(initializer);
-			logger.trace("Added existing " + type.getSimpleName() + " initializer bean '" + beanName + "'; order="
-					+ order + ", resource=" + resourceDescription);
-		}
-	}
+    private void addServletContextInitializerBean(Class<?> type, String beanName, ServletContextInitializer initializer,
+                                                  ListableBeanFactory beanFactory, Object source) {
+        this.initializers.add(type, initializer);
+        if (source != null) {
+            this.seen.add(type, source);
+        }
+        if (logger.isTraceEnabled()) {
+            String resourceDescription = getResourceDescription(beanName, beanFactory);
+            int order = getOrder(initializer);
+            logger.trace("Added existing " + type.getSimpleName() + " initializer bean '" + beanName + "'; order="
+                    + order + ", resource=" + resourceDescription);
+        }
+    }
 
-	private String getResourceDescription(String beanName, ListableBeanFactory beanFactory) {
-		if (beanFactory instanceof BeanDefinitionRegistry registry) {
-			return registry.getBeanDefinition(beanName).getResourceDescription();
-		}
-		return "unknown";
-	}
+    private String getResourceDescription(String beanName, ListableBeanFactory beanFactory) {
+        if (beanFactory instanceof BeanDefinitionRegistry registry) {
+            return registry.getBeanDefinition(beanName).getResourceDescription();
+        }
+        return "unknown";
+    }
 
-	@SuppressWarnings("unchecked")
-	protected void addAdaptableBeans(ListableBeanFactory beanFactory) {
-		MultipartConfigElement multipartConfig = getMultipartConfig(beanFactory);
-		addAsRegistrationBean(beanFactory, Servlet.class, new ServletRegistrationBeanAdapter(multipartConfig));
-		addAsRegistrationBean(beanFactory, Filter.class, new FilterRegistrationBeanAdapter());
-		for (Class<?> listenerType : ServletListenerRegistrationBean.getSupportedTypes()) {
-			addAsRegistrationBean(beanFactory, EventListener.class, (Class<EventListener>) listenerType,
-					new ServletListenerRegistrationBeanAdapter());
-		}
-	}
+    protected void addAdaptableBeans(ListableBeanFactory beanFactory) {
+        MultipartConfigElement multipartConfig = getMultipartConfig(beanFactory);
+        addServletBeans(beanFactory, multipartConfig);
+        addFilterBeans(beanFactory);
+        addListenerBeans(beanFactory);
+    }
 
-	private MultipartConfigElement getMultipartConfig(ListableBeanFactory beanFactory) {
-		List<Entry<String, MultipartConfigElement>> beans = getOrderedBeansOfType(beanFactory,
-				MultipartConfigElement.class);
-		return beans.isEmpty() ? null : beans.get(0).getValue();
-	}
+    private void addServletBeans(ListableBeanFactory beanFactory, MultipartConfigElement multipartConfig) {
+        String[] beanNames = beanFactory.getBeanNamesForType(Servlet.class, true, false);
+        for (String beanName : beanNames) {
+            Servlet servlet = beanFactory.getBean(beanName, Servlet.class);
+            if (this.seen.add(Servlet.class, servlet)) {
+                ServletRegistrationBean<Servlet> registrationBean = new ServletRegistrationBean<>(servlet, "/");
+                registrationBean.setName(beanName);
+                registrationBean.setMultipartConfig(multipartConfig);
+                this.initializers.add(Servlet.class, registrationBean);
+            }
+        }
+    }
 
-	protected <T> void addAsRegistrationBean(ListableBeanFactory beanFactory, Class<T> type,
-			RegistrationBeanAdapter<T> adapter) {
-		addAsRegistrationBean(beanFactory, type, type, adapter);
-	}
+    private void addFilterBeans(ListableBeanFactory beanFactory) {
+        String[] beanNames = beanFactory.getBeanNamesForType(Filter.class, true, false);
+        for (String beanName : beanNames) {
+            Filter filter = beanFactory.getBean(beanName, Filter.class);
+            if (this.seen.add(Filter.class, filter)) {
+                FilterRegistrationBean<Filter> registrationBean = new FilterRegistrationBean<>(filter);
+                registrationBean.setName(beanName);
+                this.initializers.add(Filter.class, registrationBean);
+            }
+        }
+    }
 
-	private <T, B extends T> void addAsRegistrationBean(ListableBeanFactory beanFactory, Class<T> type,
-			Class<B> beanType, RegistrationBeanAdapter<T> adapter) {
-		List<Map.Entry<String, B>> entries = getOrderedBeansOfType(beanFactory, beanType, this.seen);
-		for (Entry<String, B> entry : entries) {
-			String beanName = entry.getKey();
-			B bean = entry.getValue();
-			if (this.seen.add(type, bean)) {
-				// One that we haven't already seen
-				RegistrationBean registration = adapter.createRegistrationBean(beanName, bean, entries.size());
-				int order = getOrder(bean);
-				registration.setOrder(order);
-				this.initializers.add(type, registration);
-				if (logger.isTraceEnabled()) {
-					logger.trace("Created " + type.getSimpleName() + " initializer for bean '" + beanName + "'; order="
-							+ order + ", resource=" + getResourceDescription(beanName, beanFactory));
-				}
-			}
-		}
-	}
+    private void addListenerBeans(ListableBeanFactory beanFactory) {
+        for (Class<?> listenerType : ServletListenerRegistrationBean.getSupportedTypes()) {
+            String[] beanNames = beanFactory.getBeanNamesForType(listenerType, true, false);
+            for (String beanName : beanNames) {
+                EventListener listener = (EventListener) beanFactory.getBean(beanName, listenerType);
+                if (this.seen.add(EventListener.class, listener)) {
+                    ServletListenerRegistrationBean<EventListener> registrationBean = new ServletListenerRegistrationBean<>(listener);
+                    registrationBean.setName(beanName);
+                    this.initializers.add(EventListener.class, registrationBean);
+                }
+            }
+        }
+    }
 
-	private int getOrder(Object value) {
-		return new AnnotationAwareOrderComparator() {
-			@Override
-			public int getOrder(Object obj) {
-				return super.getOrder(obj);
-			}
-		}.getOrder(value);
-	}
+    private MultipartConfigElement getMultipartConfig(ListableBeanFactory beanFactory) {
+        List<Entry<String, MultipartConfigElement>> beans = getOrderedBeansOfType(beanFactory,
+                MultipartConfigElement.class);
+        return beans.isEmpty() ? null : beans.get(0).getValue();
+    }
 
-	private <T> List<Entry<String, T>> getOrderedBeansOfType(ListableBeanFactory beanFactory, Class<T> type) {
-		return getOrderedBeansOfType(beanFactory, type, Seen.empty());
-	}
+    private int getOrder(Object value) {
+        return new AnnotationAwareOrderComparator() {
+            @Override
+            public int getOrder(Object obj) {
+                return super.getOrder(obj);
+            }
+        }.getOrder(value);
+    }
 
-	private <T> List<Entry<String, T>> getOrderedBeansOfType(ListableBeanFactory beanFactory, Class<T> type,
-			Seen seen) {
-		String[] names = beanFactory.getBeanNamesForType(type, true, false);
-		Map<String, T> map = new LinkedHashMap<>();
-		for (String name : names) {
-			if (!seen.contains(type, name) && !ScopedProxyUtils.isScopedTarget(name)) {
-				T bean = beanFactory.getBean(name, type);
-				if (!seen.contains(type, bean)) {
-					map.put(name, bean);
-				}
-			}
-		}
-		List<Entry<String, T>> beans = new ArrayList<>(map.entrySet());
-		beans.sort((o1, o2) -> AnnotationAwareOrderComparator.INSTANCE.compare(o1.getValue(), o2.getValue()));
-		return beans;
-	}
+    private <T> List<Entry<String, T>> getOrderedBeansOfType(ListableBeanFactory beanFactory, Class<T> type) {
+        return getOrderedBeansOfType(beanFactory, type, Seen.empty());
+    }
 
-	private void logMappings(MultiValueMap<Class<?>, ServletContextInitializer> initializers) {
-		if (logger.isDebugEnabled()) {
-			logMappings("filters", initializers, Filter.class, FilterRegistrationBean.class);
-			logMappings("servlets", initializers, Servlet.class, ServletRegistrationBean.class);
-		}
-	}
+    private <T> List<Entry<String, T>> getOrderedBeansOfType(ListableBeanFactory beanFactory, Class<T> type,
+                                                             Seen seen) {
+        String[] names = beanFactory.getBeanNamesForType(type, true, false);
+        Map<String, T> map = new LinkedHashMap<>();
+        for (String name : names) {
+            if (!seen.contains(type, name) && !ScopedProxyUtils.isScopedTarget(name)) {
+                T bean = beanFactory.getBean(name, type);
+                if (!seen.contains(type, bean)) {
+                    map.put(name, bean);
+                }
+            }
+        }
+        List<Entry<String, T>> beans = new ArrayList<>(map.entrySet());
+        beans.sort((o1, o2) -> AnnotationAwareOrderComparator.INSTANCE.compare(o1.getValue(), o2.getValue()));
+        return beans;
+    }
 
-	private void logMappings(String name, MultiValueMap<Class<?>, ServletContextInitializer> initializers,
-			Class<?> type, Class<? extends RegistrationBean> registrationType) {
-		List<ServletContextInitializer> registrations = new ArrayList<>();
-		registrations.addAll(initializers.getOrDefault(registrationType, Collections.emptyList()));
-		registrations.addAll(initializers.getOrDefault(type, Collections.emptyList()));
-		String info = registrations.stream().map(Object::toString).collect(Collectors.joining(", "));
-		logger.debug("Mapping " + name + ": " + info);
-	}
+    private void logMappings(MultiValueMap<Class<?>, ServletContextInitializer> initializers) {
+        if (logger.isDebugEnabled()) {
+            logMappings("filters", initializers, Filter.class, FilterRegistrationBean.class);
+            logMappings("servlets", initializers, Servlet.class, ServletRegistrationBean.class);
+        }
+    }
 
-	@Override
-	public Iterator<ServletContextInitializer> iterator() {
-		return this.sortedList.iterator();
-	}
+    private void logMappings(String name, MultiValueMap<Class<?>, ServletContextInitializer> initializers,
+                             Class<?> type, Class<? extends RegistrationBean> registrationType) {
+        List<ServletContextInitializer> registrations = new ArrayList<>();
+        registrations.addAll(initializers.getOrDefault(registrationType, Collections.emptyList()));
+        registrations.addAll(initializers.getOrDefault(type, Collections.emptyList()));
+        String info = registrations.stream().map(Object::toString).collect(Collectors.joining(", "));
+        logger.debug("Mapping " + name + ": " + info);
+    }
 
-	@Override
-	public int size() {
-		return this.sortedList.size();
-	}
+    @Override
+    public Iterator<ServletContextInitializer> iterator() {
+        return this.sortedList.iterator();
+    }
 
-	/**
-	 * Adapter to convert a given Bean type into a {@link RegistrationBean} (and hence a
-	 * {@link ServletContextInitializer}).
-	 *
-	 * @param <T> the type of the Bean to adapt
-	 */
-	@FunctionalInterface
-	protected interface RegistrationBeanAdapter<T> {
+    @Override
+    public int size() {
+        return this.sortedList.size();
+    }
 
-		RegistrationBean createRegistrationBean(String name, T source, int totalNumberOfSourceBeans);
+    private static final class Seen {
 
-	}
+        private final Map<Class<?>, Set<Object>> seen = new HashMap<>();
 
-	/**
-	 * {@link RegistrationBeanAdapter} for {@link Servlet} beans.
-	 */
-	private static class ServletRegistrationBeanAdapter implements RegistrationBeanAdapter<Servlet> {
+        boolean add(Class<?> type, Object object) {
+            if (contains(type, object)) {
+                return false;
+            }
+            return this.seen.computeIfAbsent(type, (ignore) -> new HashSet<>()).add(object);
+        }
 
-		private final MultipartConfigElement multipartConfig;
+        boolean contains(Class<?> type, Object object) {
+            if (this.seen.isEmpty()) {
+                return false;
+            }
+            if (type != ServletContextInitializer.class
+                    && this.seen.getOrDefault(type, Collections.emptySet()).contains(object)) {
+                return true;
+            }
+            return this.seen.getOrDefault(ServletContextInitializer.class, Collections.emptySet()).contains(object);
+        }
 
-		ServletRegistrationBeanAdapter(MultipartConfigElement multipartConfig) {
-			this.multipartConfig = multipartConfig;
-		}
+        static Seen empty() {
+            return new Seen();
+        }
 
-		@Override
-		public RegistrationBean createRegistrationBean(String name, Servlet source, int totalNumberOfSourceBeans) {
-			String url = (totalNumberOfSourceBeans != 1) ? "/" + name + "/" : "/";
-			if (name.equals(DISPATCHER_SERVLET_NAME)) {
-				url = "/"; // always map the main dispatcherServlet to "/"
-			}
-			ServletRegistrationBean<Servlet> bean = new ServletRegistrationBean<>(source, url);
-			bean.setName(name);
-			bean.setMultipartConfig(this.multipartConfig);
-			return bean;
-		}
-
-	}
-
-	/**
-	 * {@link RegistrationBeanAdapter} for {@link Filter} beans.
-	 */
-	private static final class FilterRegistrationBeanAdapter implements RegistrationBeanAdapter<Filter> {
-
-		@Override
-		public RegistrationBean createRegistrationBean(String name, Filter source, int totalNumberOfSourceBeans) {
-			FilterRegistrationBean<Filter> bean = new FilterRegistrationBean<>(source);
-			bean.setName(name);
-			return bean;
-		}
-
-	}
-
-	/**
-	 * {@link RegistrationBeanAdapter} for certain {@link EventListener} beans.
-	 */
-	private static final class ServletListenerRegistrationBeanAdapter
-			implements RegistrationBeanAdapter<EventListener> {
-
-		@Override
-		public RegistrationBean createRegistrationBean(String name, EventListener source,
-				int totalNumberOfSourceBeans) {
-			return new ServletListenerRegistrationBean<>(source);
-		}
-
-	}
-
-	private static final class Seen {
-
-		private final Map<Class<?>, Set<Object>> seen = new HashMap<>();
-
-		boolean add(Class<?> type, Object object) {
-			if (contains(type, object)) {
-				return false;
-			}
-			return this.seen.computeIfAbsent(type, (ignore) -> new HashSet<>()).add(object);
-		}
-
-		boolean contains(Class<?> type, Object object) {
-			if (this.seen.isEmpty()) {
-				return false;
-			}
-			// If it has been directly seen, or the implemented ServletContextInitializer
-			// has been seen already
-			if (type != ServletContextInitializer.class
-					&& this.seen.getOrDefault(type, Collections.emptySet()).contains(object)) {
-				return true;
-			}
-			return this.seen.getOrDefault(ServletContextInitializer.class, Collections.emptySet()).contains(object);
-		}
-
-		static Seen empty() {
-			return new Seen();
-		}
-
-	}
+    }
 
 }
